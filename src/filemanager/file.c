@@ -1977,6 +1977,17 @@ do_confirm_copy_move (const WPanel *panel, gboolean force_single, const char *so
         dest_dir = g_strdup (tmp_dest_dir);
     }
 
+#ifdef ENABLE_VFS_GCS
+    /* For GCS single-entry ops, append source name to dest so the user
+     * can easily edit it for rename-while-copy */
+    if (!force_single && source != NULL && gcs_is_gcs_vpath (panel->cwd_vpath))
+    {
+        char *tmp = g_strconcat (dest_dir, source, (char *) NULL);
+        g_free (dest_dir);
+        dest_dir = tmp;
+    }
+#endif
+
     if (dest_dir == NULL)
         return NULL;
 
@@ -3587,6 +3598,20 @@ panel_operate (void *source_panel, FileOperation operation, gboolean force_singl
     if (gcs_is_gcs_vpath (panel->cwd_vpath)
         || (dest_vpath != NULL && gcs_is_gcs_vpath (dest_vpath)))
     {
+        /* Build full destination: dest is the directory, ctx->dest_mask is the name.
+         * Mask "\\0" means keep original name (just use dest as directory).
+         * Otherwise append the mask as the destination name (rename). */
+        char *gcs_dest = NULL;
+        gboolean gcs_rename = FALSE;
+
+        if (dest != NULL && ctx->dest_mask != NULL && strcmp (ctx->dest_mask, "\\0") != 0)
+        {
+            gcs_dest = g_strconcat (dest, ctx->dest_mask, (char *) NULL);
+            gcs_rename = TRUE;
+        }
+        else if (dest != NULL)
+            gcs_dest = g_strdup (dest);
+
         if (single_entry)
         {
             vfs_path_t *src_vpath;
@@ -3604,10 +3629,10 @@ panel_operate (void *source_panel, FileOperation operation, gboolean force_singl
             switch (operation)
             {
             case OP_COPY:
-                value = gcs_copy_op (full_src, dest, S_ISDIR (src_stat.st_mode));
+                value = gcs_copy_op (full_src, gcs_dest, S_ISDIR (src_stat.st_mode), gcs_rename);
                 break;
             case OP_MOVE:
-                value = gcs_move_op (full_src, dest, S_ISDIR (src_stat.st_mode));
+                value = gcs_move_op (full_src, gcs_dest, S_ISDIR (src_stat.st_mode), gcs_rename);
                 break;
             case OP_DELETE:
                 value = gcs_delete_op (full_src, S_ISDIR (src_stat.st_mode));
@@ -3642,10 +3667,10 @@ panel_operate (void *source_panel, FileOperation operation, gboolean force_singl
                 switch (operation)
                 {
                 case OP_COPY:
-                    value = gcs_copy_op (full_src, dest, is_dir);
+                    value = gcs_copy_op (full_src, gcs_dest, is_dir, gcs_rename);
                     break;
                 case OP_MOVE:
-                    value = gcs_move_op (full_src, dest, is_dir);
+                    value = gcs_move_op (full_src, gcs_dest, is_dir, gcs_rename);
                     break;
                 case OP_DELETE:
                     value = gcs_delete_op (full_src, is_dir);
@@ -3661,6 +3686,8 @@ panel_operate (void *source_panel, FileOperation operation, gboolean force_singl
                     do_file_mark (panel, i, 0);
             }
         }
+
+        g_free (gcs_dest);
         goto clean_up;
     }
 #endif

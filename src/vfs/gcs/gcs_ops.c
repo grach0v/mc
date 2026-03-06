@@ -75,23 +75,6 @@ gcs_vfs_to_gs_url (const char *mc_path)
 
 /* --------------------------------------------------------------------------------------------- */
 
-static FileProgressStatus
-gcs_run_shell_op (const char *cmd, gboolean is_dir)
-{
-    char *full_cmd;
-    int ret;
-
-    if (is_dir)
-        full_cmd = g_strconcat (cmd, " -r", NULL);
-    else
-        full_cmd = g_strdup (cmd);
-
-    ret = gcs_progress_dialog_run (full_cmd);
-    g_free (full_cmd);
-
-    return (FileProgressStatus) ret;
-}
-
 /* --------------------------------------------------------------------------------------------- */
 /*** public functions ****************************************************************************/
 /* --------------------------------------------------------------------------------------------- */
@@ -114,41 +97,57 @@ gcs_is_gcs_vpath (const vfs_path_t *vpath)
 /* --------------------------------------------------------------------------------------------- */
 
 FileProgressStatus
-gcs_copy_op (const char *src, const char *dst, gboolean is_dir)
+gcs_copy_op (const char *src, const char *dst, gboolean is_dir, gboolean rename)
 {
     char *gs_src, *gs_dst, *cmd;
-    FileProgressStatus ret;
+    int ret;
 
     gs_src = gcs_vfs_to_gs_url (src);
     gs_dst = gcs_vfs_to_gs_url (dst);
-    cmd = g_strdup_printf ("gcloud storage cp '%s' '%s'", gs_src, gs_dst);
 
-    ret = gcs_run_shell_op (cmd, is_dir);
+    /* When renaming a directory, use rsync to copy contents directly
+     * into the new name instead of nesting src inside dst */
+    if (is_dir && rename)
+        cmd = g_strdup_printf ("gcloud storage rsync -r '%s' '%s'", gs_src, gs_dst);
+    else if (is_dir)
+        cmd = g_strdup_printf ("gcloud storage cp -r '%s' '%s'", gs_src, gs_dst);
+    else
+        cmd = g_strdup_printf ("gcloud storage cp '%s' '%s'", gs_src, gs_dst);
+
+    ret = gcs_progress_dialog_run (cmd);
 
     g_free (cmd);
     g_free (gs_src);
     g_free (gs_dst);
-    return ret;
+    return (FileProgressStatus) ret;
 }
 
 /* --------------------------------------------------------------------------------------------- */
 
 FileProgressStatus
-gcs_move_op (const char *src, const char *dst, gboolean is_dir)
+gcs_move_op (const char *src, const char *dst, gboolean is_dir, gboolean rename)
 {
     char *gs_src, *gs_dst, *cmd;
-    FileProgressStatus ret;
+    int ret;
 
     gs_src = gcs_vfs_to_gs_url (src);
     gs_dst = gcs_vfs_to_gs_url (dst);
-    cmd = g_strdup_printf ("gcloud storage mv '%s' '%s'", gs_src, gs_dst);
 
-    ret = gcs_run_shell_op (cmd, is_dir);
+    /* For move+rename, rsync then delete the source */
+    if (is_dir && rename)
+        cmd = g_strdup_printf ("gcloud storage rsync -r '%s' '%s' && gcloud storage rm -r '%s'",
+                               gs_src, gs_dst, gs_src);
+    else if (is_dir)
+        cmd = g_strdup_printf ("gcloud storage mv -r '%s' '%s'", gs_src, gs_dst);
+    else
+        cmd = g_strdup_printf ("gcloud storage mv '%s' '%s'", gs_src, gs_dst);
+
+    ret = gcs_progress_dialog_run (cmd);
 
     g_free (cmd);
     g_free (gs_src);
     g_free (gs_dst);
-    return ret;
+    return (FileProgressStatus) ret;
 }
 
 /* --------------------------------------------------------------------------------------------- */
@@ -157,16 +156,20 @@ FileProgressStatus
 gcs_delete_op (const char *path, gboolean is_dir)
 {
     char *gs_path, *cmd;
-    FileProgressStatus ret;
+    int ret;
 
     gs_path = gcs_vfs_to_gs_url (path);
-    cmd = g_strdup_printf ("gcloud storage rm '%s'", gs_path);
 
-    ret = gcs_run_shell_op (cmd, is_dir);
+    if (is_dir)
+        cmd = g_strdup_printf ("gcloud storage rm -r '%s'", gs_path);
+    else
+        cmd = g_strdup_printf ("gcloud storage rm '%s'", gs_path);
+
+    ret = gcs_progress_dialog_run (cmd);
 
     g_free (cmd);
     g_free (gs_path);
-    return ret;
+    return (FileProgressStatus) ret;
 }
 
 /* --------------------------------------------------------------------------------------------- */

@@ -21,8 +21,8 @@
 void vfs_init_gcsfs (void);
 
 gboolean gcs_is_gcs_vpath (const vfs_path_t *vpath);
-FileProgressStatus gcs_copy_op (const char *src, const char *dst, gboolean is_dir);
-FileProgressStatus gcs_move_op (const char *src, const char *dst, gboolean is_dir);
+FileProgressStatus gcs_copy_op (const char *src, const char *dst, gboolean is_dir, gboolean rename);
+FileProgressStatus gcs_move_op (const char *src, const char *dst, gboolean is_dir, gboolean rename);
 FileProgressStatus gcs_delete_op (const char *path, gboolean is_dir);
 
 /*** inline functions ****************************************************************************/
