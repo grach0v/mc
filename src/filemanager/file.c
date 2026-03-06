@@ -85,6 +85,10 @@
 
 #include "file.h"
 
+#ifdef ENABLE_VFS_GCS
+#include "src/vfs/gcs/gcs.h"
+#endif
+
 /* }}} */
 
 /*** global variables ****************************************************************************/
@@ -3578,6 +3582,88 @@ panel_operate (void *source_panel, FileOperation operation, gboolean force_singl
     if ((vfs_path_tokens_count (panel->cwd_vpath) != 0)
         && (mc_setctl (panel->cwd_vpath, VFS_SETCTL_STALE_DATA, GUINT_TO_POINTER (1)) != 0))
         save_cwd = vfs_path_clone (panel->cwd_vpath);
+
+#ifdef ENABLE_VFS_GCS
+    if (gcs_is_gcs_vpath (panel->cwd_vpath)
+        || (dest_vpath != NULL && gcs_is_gcs_vpath (dest_vpath)))
+    {
+        if (single_entry)
+        {
+            vfs_path_t *src_vpath;
+            const char *full_src;
+
+            if (source != NULL && g_path_is_absolute (source))
+                src_vpath = vfs_path_from_str (source);
+            else if (source != NULL)
+                src_vpath = vfs_path_append_new (panel->cwd_vpath, source, (char *) NULL);
+            else
+                src_vpath = vfs_path_clone (panel->cwd_vpath);
+
+            full_src = vfs_path_as_str (src_vpath);
+
+            switch (operation)
+            {
+            case OP_COPY:
+                value = gcs_copy_op (full_src, dest, S_ISDIR (src_stat.st_mode));
+                break;
+            case OP_MOVE:
+                value = gcs_move_op (full_src, dest, S_ISDIR (src_stat.st_mode));
+                break;
+            case OP_DELETE:
+                value = gcs_delete_op (full_src, S_ISDIR (src_stat.st_mode));
+                break;
+            default:
+                value = FILE_CONT;
+                break;
+            }
+
+            vfs_path_free (src_vpath, TRUE);
+
+            if (value == FILE_CONT && !force_single)
+                unmark_files (panel);
+        }
+        else
+        {
+            value = FILE_CONT;
+            for (i = 0; i < panel->dir.len && value != FILE_ABORT; i++)
+            {
+                vfs_path_t *src_vpath;
+                const char *full_src;
+                gboolean is_dir;
+
+                if (panel->dir.list[i].f.marked == 0)
+                    continue;
+
+                src_vpath = vfs_path_append_new (panel->cwd_vpath,
+                                                 panel->dir.list[i].fname->str, (char *) NULL);
+                full_src = vfs_path_as_str (src_vpath);
+                is_dir = S_ISDIR (panel->dir.list[i].st.st_mode);
+
+                switch (operation)
+                {
+                case OP_COPY:
+                    value = gcs_copy_op (full_src, dest, is_dir);
+                    break;
+                case OP_MOVE:
+                    value = gcs_move_op (full_src, dest, is_dir);
+                    break;
+                case OP_DELETE:
+                    value = gcs_delete_op (full_src, is_dir);
+                    break;
+                default:
+                    value = FILE_CONT;
+                    break;
+                }
+
+                vfs_path_free (src_vpath, TRUE);
+
+                if (value == FILE_CONT)
+                    do_file_mark (panel, i, 0);
+            }
+        }
+        goto clean_up;
+    }
+#endif
 
     // Now, let's do the job
 

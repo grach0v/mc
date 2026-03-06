@@ -983,7 +983,18 @@ vfs_prefix_to_class (const char *prefix)
 {
     guint i;
 
-    // Avoid first class (localfs) that would accept any prefix
+    // First pass: check classes with explicit prefix (exact match preferred over extfs which())
+    for (i = 1; i < vfs__classes_list->len; i++)
+    {
+        struct vfs_class *vfs;
+
+        vfs = VFS_CLASS (g_ptr_array_index (vfs__classes_list, i));
+
+        if (vfs->prefix != NULL && strncmp (prefix, vfs->prefix, strlen (vfs->prefix)) == 0)
+            return vfs;
+    }
+
+    // Second pass: check classes with which() callback (e.g. extfs)
     for (i = 1; i < vfs__classes_list->len; i++)
     {
         struct vfs_class *vfs;
@@ -995,9 +1006,6 @@ vfs_prefix_to_class (const char *prefix)
                 continue;
             return vfs;
         }
-
-        if (vfs->prefix != NULL && strncmp (prefix, vfs->prefix, strlen (vfs->prefix)) == 0)
-            return vfs;
     }
 
     return NULL;

@@ -40,3 +40,8 @@ if ENABLE_VFS_TAR
 SUBDIRS += tar
 libmc_vfs_la_LIBADD += tar/libvfs-tar.la
 endif
+
+if ENABLE_VFS_GCS
+SUBDIRS += gcs
+libmc_vfs_la_LIBADD += gcs/libvfs-gcs.la
+endif

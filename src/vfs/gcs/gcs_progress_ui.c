@@ -1,11 +1,7 @@
-/*
-   Init VFS plugins.
+/* Virtual File System: GCS - run gcloud commands in the shell console.
 
-   Copyright (C) 2011-2026
+   Copyright (C) 2026
    Free Software Foundation, Inc.
-
-   Written by:
-   Slava Zanko <slavazanko@gmail.com>, 2011.
 
    This file is part of the Midnight Commander.
 
@@ -23,54 +19,15 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** \file
- *  \brief This is a template file (here goes brief description).
- *  \author Author1
- *  \author Author2
- *  \date 20xx
- *
- *  Detailed description.
- */
-
 #include <config.h>
 
 #include "lib/global.h"
+#include "lib/widget.h"
 
-#include "local/local.h"
+#include "src/execute.h"
+#include "src/filemanager/filegui.h"
 
-#ifdef ENABLE_VFS_CPIO
-#include "cpio/cpio.h"
-#endif
-
-#ifdef ENABLE_VFS_EXTFS
-#include "extfs/extfs.h"
-#endif
-
-#ifdef ENABLE_VFS_SHELL
-#include "shell/shell.h"
-#endif
-
-#ifdef ENABLE_VFS_FTP
-#include "ftpfs/ftpfs.h"
-#endif
-
-#ifdef ENABLE_VFS_SFTP
-#include "sftpfs/sftpfs.h"
-#endif
-
-#ifdef ENABLE_VFS_SFS
-#include "sfs/sfs.h"
-#endif
-
-#ifdef ENABLE_VFS_TAR
-#include "tar/tar.h"
-#endif
-
-#ifdef ENABLE_VFS_GCS
-#include "gcs/gcs.h"
-#endif
-
-#include "plugins_init.h"
+#include "internal.h"
 
 /*** global variables ****************************************************************************/
 
@@ -80,6 +37,7 @@
 
 /*** file scope variables ************************************************************************/
 
+/* --------------------------------------------------------------------------------------------- */
 /*** file scope functions ************************************************************************/
 /* --------------------------------------------------------------------------------------------- */
 
@@ -87,37 +45,17 @@
 /*** public functions ****************************************************************************/
 /* --------------------------------------------------------------------------------------------- */
 
-void
-vfs_plugins_init (void)
+int
+gcs_progress_dialog_run (const char *cmd)
 {
-    // localfs needs to be the first one
-    vfs_init_localfs ();
+    char *shell_cmd;
 
-#ifdef ENABLE_VFS_CPIO
-    vfs_init_cpiofs ();
-#endif
-#ifdef ENABLE_VFS_TAR
-    vfs_init_tarfs ();
-#endif
-#ifdef ENABLE_VFS_SFS
-    vfs_init_sfs ();
-#endif
-#ifdef ENABLE_VFS_EXTFS
-    vfs_init_extfs ();
-#endif
+    /* Run via shell with echo of the command and exit status check */
+    shell_cmd = g_strdup_printf ("echo '>>> %s' && %s", cmd, cmd);
+    shell_execute (shell_cmd, 0);
+    g_free (shell_cmd);
 
-#ifdef ENABLE_VFS_FTP
-    vfs_init_ftpfs ();
-#endif
-#ifdef ENABLE_VFS_SFTP
-    vfs_init_sftpfs ();
-#endif
-#ifdef ENABLE_VFS_SHELL
-    vfs_init_shell ();
-#endif
-#ifdef ENABLE_VFS_GCS
-    vfs_init_gcsfs ();
-#endif
+    return FILE_CONT;
 }
 
 /* --------------------------------------------------------------------------------------------- */
