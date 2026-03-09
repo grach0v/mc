@@ -160,8 +160,30 @@ gcs_delete_op (const char *path, gboolean is_dir)
 
     gs_path = gcs_vfs_to_gs_url (path);
 
+    /* Detect GCS directory placeholder self-reference: when a 0-byte placeholder
+     * object "dir/" is listed inside "dir/", the VFS path becomes "dir/dir".
+     * Detect this by checking if the last two path components are identical,
+     * and if so, delete the placeholder object "dir/" instead. */
     if (is_dir)
-        cmd = g_strdup_printf ("gcloud storage rm -r '%s'", gs_path);
+    {
+        char *child_name = g_path_get_basename (gs_path);
+        char *parent_path = g_path_get_dirname (gs_path);
+        char *parent_name = g_path_get_basename (parent_path);
+
+        if (strcmp (child_name, parent_name) == 0)
+        {
+            // self-reference placeholder: delete "gs://bucket/dir/" (the 0-byte object)
+            cmd = g_strdup_printf ("gcloud storage rm '%s/'", parent_path);
+        }
+        else
+        {
+            cmd = g_strdup_printf ("gcloud storage rm -r '%s'", gs_path);
+        }
+
+        g_free (child_name);
+        g_free (parent_path);
+        g_free (parent_name);
+    }
     else
         cmd = g_strdup_printf ("gcloud storage rm '%s'", gs_path);
 

@@ -43,7 +43,7 @@
 
 static void
 gcs_parse_ls_line (struct vfs_class *me, struct vfs_s_inode *dir, struct vfs_s_super *super,
-                   const char *line, const char *bucket)
+                   const char *line)
 {
     struct vfs_s_entry *ent;
     const char *gs_prefix;
@@ -65,6 +65,15 @@ gcs_parse_ls_line (struct vfs_class *me, struct vfs_s_inode *dir, struct vfs_s_s
         while (*trimmed == ' ')
             trimmed++;
         if (g_str_has_prefix (trimmed, "TOTAL:"))
+            return;
+    }
+
+    // skip header lines like "gs://bucket/path/:"
+    {
+        const char *trimmed = line;
+        while (*trimmed == ' ')
+            trimmed++;
+        if (g_str_has_prefix (trimmed, "gs://") && g_str_has_suffix (trimmed, ":"))
             return;
     }
 
@@ -97,16 +106,18 @@ gcs_parse_ls_line (struct vfs_class *me, struct vfs_s_inode *dir, struct vfs_s_s
         return;
     }
 
-    // skip entry if it matches the bucket root itself
+    // skip duplicate entries (gcloud outputs self-reference lines multiple times)
     {
-        char *bucket_url = g_strdup_printf ("gs://%s", bucket);
-        if (strcmp (url, bucket_url) == 0)
+        GList *iter;
+        for (iter = g_queue_peek_head_link (dir->subdir); iter != NULL; iter = g_list_next (iter))
         {
-            g_free (bucket_url);
-            g_free (url);
-            return;
+            struct vfs_s_entry *existing = (struct vfs_s_entry *) iter->data;
+            if (strcmp (existing->name, base) == 0)
+            {
+                g_free (url);
+                return;
+            }
         }
-        g_free (bucket_url);
     }
 
     if (!is_dir)
@@ -178,7 +189,7 @@ gcs_dir_load (struct vfs_class *me, struct vfs_s_inode *dir, const char *remote_
     {
         lines = g_strsplit (output, "\n", -1);
         for (i = 0; lines[i] != NULL; i++)
-            gcs_parse_ls_line (me, dir, dir->super, lines[i], gcs_super->bucket);
+            gcs_parse_ls_line (me, dir, dir->super, lines[i]);
         g_strfreev (lines);
     }
 
