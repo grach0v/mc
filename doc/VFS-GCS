@@ -1,0 +1,141 @@
+Google Cloud Storage (GCS) Virtual File System for Midnight Commander
+======================================================================
+
+Overview
+--------
+The GCS VFS plugin lets you browse and manipulate Google Cloud Storage
+buckets directly in Midnight Commander panels using the gcs:// prefix.
+
+It shells out to `gcloud storage` CLI commands, so no additional
+libraries are needed -- just an authenticated gcloud installation.
+
+Prerequisites
+-------------
+1. Google Cloud SDK (`gcloud`) installed and in PATH
+2. Authenticated: `gcloud auth login`
+3. A GCS bucket you have access to
+
+For read-only access to public buckets, authentication is sufficient
+(no billing account required).
+
+Build
+-----
+Build dependencies (Ubuntu/Debian):
+
+    sudo apt-get install -y autoconf automake libtool pkg-config \
+        gettext libglib2.0-dev libslang2-dev
+
+Build dependencies (macOS with Homebrew):
+
+    brew install autoconf automake libtool pkg-config gettext \
+        glib s-lang
+
+Build and install:
+
+    cd ~/git/mc
+    ./autogen.sh
+    ./configure --enable-vfs-gcs --prefix=$HOME/.local/mc-gcs
+    make -j$(nproc)
+    make install
+
+To run as a standalone command:
+
+    cat > ~/.local/bin/mc-gcs << 'EOF'
+    #!/bin/bash
+    export MC_DATADIR="$HOME/.local/mc-gcs/share/mc/"
+    exec "$HOME/.local/mc-gcs/bin/mc" "$@"
+    EOF
+    chmod +x ~/.local/bin/mc-gcs
+
+Usage
+-----
+In MC command line:
+
+    cd gcs://BUCKET-NAME          Browse a bucket root
+    cd gcs://BUCKET-NAME/path/    Browse a subdirectory
+
+Key bindings (standard MC):
+
+    F3      View a file (downloads to temp, opens viewer)
+    F4      Edit a file (downloads to temp, uploads on save)
+    F5      Copy files/directories
+    F6      Move/rename files/directories
+    F7      Create directory
+    F8      Delete files/directories
+    Ctrl+O  Toggle console to see gcloud command output
+
+All operations work between:
+  - Local filesystem <-> GCS
+  - GCS <-> GCS (same or different buckets)
+
+How It Works
+------------
+The plugin registers as a VFS class with prefix "gcs". MC paths like
+gcs://bucket/path are parsed with host=bucket, path=/path.
+
+Directory listing:
+  Uses `gcloud storage ls -l gs://BUCKET/path/` and parses the output
+  to create directory entries. Listings are cached for 30 seconds.
+
+File view/edit:
+  Downloads via `gcloud storage cp gs://... /tmp/mc-gcsXXXXXX`.
+  On save, uploads back via `gcloud storage cp /tmp/... gs://...`.
+
+Bulk operations (F5/F6/F8):
+  When source or destination is a GCS path, MC intercepts the operation
+  and runs a single gcloud command instead of recursing file-by-file:
+
+  Copy file:       gcloud storage cp 'gs://src' 'gs://dst'
+  Copy directory:  gcloud storage cp -r 'gs://src' 'gs://dst'
+  Copy+rename dir: gcloud storage rsync -r 'gs://src' 'gs://dst'
+  Move file:       gcloud storage mv 'gs://src' 'gs://dst'
+  Move directory:  gcloud storage mv -r 'gs://src' 'gs://dst'
+  Move+rename dir: gcloud storage rsync -r 'gs://src' 'gs://dst'
+                   && gcloud storage rm -r 'gs://src'
+  Delete file:     gcloud storage rm 'gs://path'
+  Delete dir:      gcloud storage rm -r 'gs://path'
+  Mkdir:           gcloud storage cp /dev/null 'gs://path/dir/'
+
+  The "rename" case (when the user edits the destination name in the
+  copy/move dialog) uses `rsync -r` instead of `cp -r` because
+  `cp -r src dst` nests src inside dst, while `rsync -r src dst`
+  copies the contents directly into dst.
+
+  All bulk commands run via `shell_execute()`, so their output is
+  visible in the MC console (Ctrl+O).
+
+Single-item operations (VFS callbacks):
+  unlink, rename, mkdir, rmdir use `gcs_run_command()` which captures
+  output internally via `mc_popen`/`mc_pread`.
+
+Public Buckets
+--------------
+You can browse publicly accessible buckets without a billing account.
+For example, to browse the Cloud Storage public datasets:
+
+    cd gcs://gcp-public-data-landsat
+
+Limitations
+-----------
+- Requires `gcloud` CLI in PATH
+- No streaming -- files are downloaded entirely before viewing
+- Directory creation is emulated (GCS has no real directories)
+- File permissions are not preserved (GCS does not support Unix perms)
+- Symlinks are not supported
+- Progress is shown in the console (Ctrl+O), not in a dialog
+
+Architecture
+------------
+Source files in src/vfs/gcs/:
+
+  gcs.c             VFS registration, archive management, utilities
+  gcs.h             Public header
+  internal.h        Shared internal declarations
+  gcs_dir.c         Lazy directory listing (gcloud storage ls)
+  gcs_file.c        File download/upload, unlink/rename/mkdir/rmdir
+  gcs_ops.c         Bulk copy/move/delete with path conversion
+  gcs_progress_ui.c Command execution via shell_execute()
+
+Tests in tests/src/vfs/gcs/:
+
+  gcs_build_gs_url.c  Tests for gs:// URL construction
