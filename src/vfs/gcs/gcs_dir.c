@@ -59,20 +59,13 @@ gcs_parse_ls_line (struct vfs_class *me, struct vfs_s_inode *dir, struct vfs_s_s
     if (line[0] == '\0')
         return;
 
-    // skip TOTAL: summary line
+    // skip non-entry lines (TOTAL: summary, gs://...path/: headers)
     {
         const char *trimmed = line;
         while (*trimmed == ' ')
             trimmed++;
         if (g_str_has_prefix (trimmed, "TOTAL:"))
             return;
-    }
-
-    // skip header lines like "gs://bucket/path/:"
-    {
-        const char *trimmed = line;
-        while (*trimmed == ' ')
-            trimmed++;
         if (g_str_has_prefix (trimmed, "gs://") && g_str_has_suffix (trimmed, ":"))
             return;
     }
